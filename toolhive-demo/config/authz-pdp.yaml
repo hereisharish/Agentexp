@@ -1,0 +1,16 @@
+# ToolHive authorization config: delegate every decision to the external PDP.
+#
+# ToolHive is the Policy Enforcement Point. For each MCP request it sends
+#   POST http://localhost:9191/decision   {principal, operation, resource, context}
+# and enforces {"allow": true|false}. It never sees the Cedar policies.
+version: "1.0"
+type: httpv1
+pdp:
+  http:
+    url: "http://localhost:9191"
+    timeout: 5
+  # "standard" forwards the JWT's sub, roles, groups and scope claims.
+  claim_mapping: standard
+  context:
+    include_args: true        # tool arguments -> context.mcp.args (for fetch-allowlist, no-pii-export)
+    include_operation: true   # feature / operation / resource_id -> context.mcp

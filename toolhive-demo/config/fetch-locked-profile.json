@@ -1,0 +1,10 @@
+{
+  "name": "fetch-locked",
+  "network": {
+    "outbound": {
+      "insecure_allow_all": false,
+      "allow_host": ["example.com", "docs.stacklok.com"],
+      "allow_port": [443]
+    }
+  }
+}

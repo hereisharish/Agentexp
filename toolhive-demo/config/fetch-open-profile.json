@@ -1,0 +1,8 @@
+{
+  "name": "fetch-open",
+  "network": {
+    "outbound": {
+      "insecure_allow_all": true
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "component": "__COMPONENT__",
+  "logFile": "__LOG_FILE__",
+  "includeRequestData": true,
+  "maxDataSize": 2048
+}

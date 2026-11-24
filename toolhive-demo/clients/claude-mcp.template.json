@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "acme": {
+      "type": "http",
+      "url": "__ACME_URL__",
+      "headers": { "Authorization": "Bearer ${TOOLHIVE_TOKEN}" }
+    },
+    "fetch": {
+      "type": "http",
+      "url": "__FETCH_URL__",
+      "headers": { "Authorization": "Bearer ${TOOLHIVE_TOKEN}" }
+    }
+  }
+}
