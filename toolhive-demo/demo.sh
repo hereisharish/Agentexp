@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ToolHive + Keycloak + external Cedar PDP demo driver.
 #
-#   ./demo.sh up                     start Keycloak, PDP, Jaeger, attacker; run MCP servers via thv
+#   ./demo.sh up                     (REBUILD=1 to rebuild images) start Keycloak, PDP, Jaeger, attacker; run MCP servers via thv
 #   ./demo.sh down                   remove everything the demo created
 #   ./demo.sh status                 show what is running
 #
@@ -22,13 +22,16 @@
 #   ./demo.sh watch [pdp|pep]        live decision feed
 #   ./demo.sh attacker               live attacker listener output
 #   ./demo.sh check                  end-to-end verification without an agent
+#
+# THV_EXTRA_FLAGS is appended to every `thv run` (e.g. "--isolate-network=false"
+# on hosts where ToolHive's egress proxy image cannot be pulled).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STATE="$ROOT/.state"
 mkdir -p "$STATE"
 
-REALM_URL="http://localhost:8080/realms/toolhive-demo"
+REALM_URL="http://localhost:8180/realms/toolhive-demo"
 ISSUER="$REALM_URL"
 AUDIENCE="toolhive-demo"
 CLIENT_ID="toolhive-demo-cli"
@@ -153,7 +156,8 @@ run_acme() {
   remove_workload acme
   local flags; mapfile -t flags < <(common_flags acme)
   info "thv run acme (guardrails: $(mode_get guardrails on))"
-  thv run --name acme --transport stdio --proxy-port "$ACME_PORT" "${flags[@]}" "$ACME_IMAGE"
+  # shellcheck disable=SC2086 # THV_EXTRA_FLAGS is intentionally word-split
+  thv run --name acme --transport stdio --proxy-port "$ACME_PORT" "${flags[@]}" ${THV_EXTRA_FLAGS:-} "$ACME_IMAGE"
 }
 
 run_fetch() {
@@ -168,7 +172,8 @@ run_fetch() {
     flags+=(--permission-profile "$ROOT/config/fetch-locked-profile.json" --isolate-network)
   fi
   info "thv run fetch (guardrails: $(mode_get guardrails on), network: $net)"
-  thv run --name fetch --proxy-port "$FETCH_PORT" "${flags[@]}" fetch
+  # shellcheck disable=SC2086
+  thv run --name fetch --proxy-port "$FETCH_PORT" "${flags[@]}" ${THV_EXTRA_FLAGS:-} fetch
 }
 
 wait_servers() {
@@ -190,10 +195,14 @@ wait_servers() {
 cmd_up() {
   need docker thv curl "$PY"
   docker info >/dev/null 2>&1 || die "Docker is not running"
-  info "building the acme-data MCP server image"
-  docker build -q -t "$ACME_IMAGE" "$ROOT/servers/acme-data" >/dev/null
+  local build=()
+  if [[ ${REBUILD:-0} == 1 ]] || ! docker image inspect "$ACME_IMAGE" >/dev/null 2>&1; then
+    info "building the acme-data MCP server image"
+    docker build -q -t "$ACME_IMAGE" "$ROOT/servers/acme-data" >/dev/null
+  fi
+  [[ ${REBUILD:-0} == 1 ]] && build=(--build)
   info "starting Keycloak, PDP, Jaeger, attacker"
-  compose up -d --build
+  compose up -d "${build[@]}"
   wait_for "$PDP_URL/healthz" "PDP"
   wait_for "$REALM_URL/.well-known/openid-configuration" "Keycloak realm" 180
   wait_for "http://localhost:16686/" "Jaeger UI"
@@ -203,7 +212,7 @@ cmd_up() {
   wait_servers
   echo
   bold "Ready."
-  echo "  Keycloak admin   http://localhost:8080/admin   (admin / admin, realm toolhive-demo)"
+  echo "  Keycloak admin   http://localhost:8180/admin   (admin / admin, realm toolhive-demo)"
   echo "  Jaeger           http://localhost:16686"
   echo "  PDP policies     $PDP_URL/policies"
   echo "  acme MCP         $(server_url acme)"
@@ -293,11 +302,12 @@ cmd_role() {
   local op=${1:-} user=${2:-} role=${3:-}
   [[ $op == add || $op == remove ]] && [[ -n $user && -n $role ]] || die "usage: role add|remove <user> <role>"
   local kc="/opt/keycloak/bin/kcadm.sh"
+  # kcadm runs inside the Keycloak container, so it uses the container port.
   compose exec -T keycloak "$kc" config credentials --server http://localhost:8080 \
-    --realm master --user admin --password admin >/dev/null
+    --realm master --user admin --password admin >/dev/null 2>&1
   local verb=add-roles; [[ $op == remove ]] && verb=remove-roles
   compose exec -T keycloak "$kc" "$verb" -r toolhive-demo --uusername "$user" --rolename "$role"
-  ok "$op role '$role' for '$user'. New tokens carry it; get one with ./demo.sh decode $user"
+  ok "$op role '$role' for '$user'. Applies to new tokens (./demo.sh decode $user); a running Claude Code keeps its old token"
 }
 
 cmd_policies() {

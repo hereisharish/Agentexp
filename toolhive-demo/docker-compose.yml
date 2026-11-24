@@ -10,12 +10,12 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-      # Tokens must carry iss=http://localhost:8080/realms/toolhive-demo,
+      # Tokens must carry iss=http://localhost:8180/realms/toolhive-demo,
       # the exact URL ToolHive is configured with.
-      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME: http://localhost:8180
       KC_HEALTH_ENABLED: "true"
     ports:
-      - "8080:8080"
+      - "8180:8080"
     volumes:
       - ./keycloak:/opt/keycloak/data/import:ro
 

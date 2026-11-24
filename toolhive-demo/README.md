@@ -88,7 +88,7 @@ Behaviour worth knowing, all confirmed against the ToolHive source:
 | [Claude Code](https://claude.com/claude-code) | `claude` on your PATH |
 | `curl`, `python3` (3.9+), `bash` | No Python packages needed |
 
-Free ports: 8080 (Keycloak), 9191 (PDP), 16686/4317/4318 (Jaeger), 9999
+Free ports: 8180 (Keycloak), 8080 (ToolHive publishes the fetch server container on it), 9191 (PDP), 16686/4317/4318 (Jaeger), 9999
 (attacker), 8301/8302 (ToolHive proxies).
 
 ## Quick start
@@ -109,7 +109,7 @@ Users (password `demo`):
 | `support-bot` | `support` | `list_customers`, `get_customer`, `update_ticket` | nothing |
 | `bob` | none | `list_customers`, `get_customer` | nothing |
 
-Admin console: http://localhost:8080/admin (`admin` / `admin`).
+Admin console: http://localhost:8180/admin (`admin` / `admin`).
 
 ## Commands
 
@@ -156,6 +156,26 @@ cd pdp && go test ./...                                   # policy outcomes, hot
 python3 servers/acme-data/test_server.py                  # needs: pip install mcp==1.30.0
 ./demo.sh check                                           # full stack, after ./demo.sh up
 ```
+
+## What has been verified
+
+Run against ToolHive built from source (`main`, 24 Nov 2026), Keycloak 26.7.5,
+Jaeger 2.21.0 and Claude Code 2.1, on Linux with Docker Engine:
+
+| Behaviour | Result |
+|---|---|
+| `./demo.sh up`, Keycloak realm import, tokens with `aud`, top-level `roles`, fixed `sub` | ✔ |
+| No token or a forged token → 401 before the PDP is asked | ✔ |
+| `tools/list` filtered per user (one PDP question per tool) | ✔ |
+| Allowed calls pass; denied calls → HTTP 403 `Unauthorized`; argument rules (`include_pii`, fetch URL) | ✔ |
+| Policy edit applies on the next call, no restart; broken policy file keeps the previous policies | ✔ |
+| Keycloak role change applies on the next token; `support-ceiling` holds with extra roles | ✔ |
+| PDP stopped → every call denied (fail closed) | ✔ |
+| ToolHive audit log (`outcome: denied`, user, tool, arguments) and PDP decision log | ✔ |
+| Jaeger spans `thv-acme` / `thv-fetch` with `mcp.tool.name`, `mcp.tool.arguments`, status 200/403 | ✔ |
+| Claude Code connects with a Keycloak token (`claude mcp list` → Connected; bad token → 401) | ✔ |
+| `./demo.sh check` | ✔ all policy checks; `fetch https://example.com` needs internet |
+| Network isolation: egress allowlist and reaching the attacker via `host.docker.internal` (Acts 2 and 7) | **Not verified**: the test sandbox could not pull ToolHive's egress-proxy image. Rehearse on the presenting laptop. |
 
 ## Safety notes
 

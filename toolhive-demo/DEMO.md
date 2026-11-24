@@ -18,7 +18,7 @@ Screen layout:
 | Terminal 2 | Claude Code (`./demo.sh claude …`) |
 | Terminal 3 | commands from this runbook |
 | Terminal 4 (small) | `./demo.sh attacker` (should stay silent) |
-| Browser | ToolHive UI · Keycloak admin (http://localhost:8080/admin) · Jaeger (http://localhost:16686) · `policies/mcp.cedar` in an editor |
+| Browser | ToolHive UI · Keycloak admin (http://localhost:8180/admin) · Jaeger (http://localhost:16686) · `policies/mcp.cedar` in an editor |
 
 How to read the feed:
 
@@ -89,6 +89,10 @@ instruction (a prompt injection) to export PII and send the record to
 **Say:** "Nobody wrote malicious code here. A customer typed text into a support
 form, and an agent with too much access did the rest."
 
+> **Rehearse this act on the presenting laptop.** The leak needs the fetch
+> container to resolve `host.docker.internal`; ToolHive provides that through its
+> isolated-network DNS sidecar on Docker, and Docker Desktop provides it natively.
+>
 > Claude often recognises the injection and refuses, which is a good outcome but
 > not a control you can rely on. Say exactly that, then show the leak path
 > directly, which is the same call the agent would make:
@@ -158,7 +162,7 @@ and which tool. Point at the `args` line in the feed.
 ## Act 5 · Change policy live (2 min)
 
 **Do:** in `policies/mcp.cedar`, comment out the whole `support-update-tickets`
-permit and save. Then:
+block, **including its `@id(...)` line**, and save. Then:
 
 ```bash
 ./demo.sh call support-bot acme update_ticket '{"customer_id":"41","status":"resolved"}'
@@ -172,7 +176,9 @@ No restart of ToolHive or Claude Code. Undo the edit and save.
 reviewed in a pull request, rolled out by saving a file."
 
 > A syntax error in a policy file is rejected and the previous policies stay in
-> force, so a typo cannot open the gates.
+> force, so a typo cannot open the gates. (If you leave the `@id` line
+> uncommented, Cedar attaches it to the next policy, the file fails to parse,
+> and the old policy stays in force. Comment out the whole block.)
 
 ## Act 6 · Change identity live (2 min)
 
@@ -231,12 +237,15 @@ denies when it cannot get an answer.
 
 ## Act 9 · The trace (3 min)
 
-**Do:** open Jaeger (http://localhost:16686) and choose service **thv-acme**, then
-**Find Traces**. Open a `tools/call` span.
+**Do:** open Jaeger (http://localhost:16686) and choose service **thv-acme**. In
+**Tags** enter `http.response.status_code=403`, then **Find Traces**: these are
+the denied calls. Open one, then clear the tag to compare an allowed call.
 
-**Show:** span attributes such as `mcp.method.name`, the tool name, the HTTP
-status and the duration, for allowed *and* denied calls. Then the raw audit
-evidence:
+**Show:** each `tools/call <tool>` span carries `mcp.tool.name`,
+`mcp.tool.arguments`, `mcp.server.name`, `mcp.session.id`,
+`http.response.status_code` (200 allowed, 403 denied) and the duration.
+(The `GET /v1.../containers` spans in the same service are ToolHive talking to
+Docker; ignore them.) Then the raw audit evidence:
 
 ```bash
 grep '"outcome":"denied"' .state/audit-acme.jsonl | tail -3 | python3 -m json.tool --json-lines
@@ -270,7 +279,9 @@ git checkout policies/mcp.cedar             # undo live edits
 | Claude Code shows the servers as failed | Token expired (60 min) or proxies restarted: `/exit` and `./demo.sh claude <user>` again |
 | Claude Code asks to approve `acme` and `fetch` | Expected on first launch in the workspace; approve both |
 | `./demo.sh up` waits on Keycloak | First boot can take 60 s or more; `docker compose logs keycloak` |
-| Every call is 401 | `./demo.sh decode alice`: `iss` must be exactly `http://localhost:8080/realms/toolhive-demo` |
+| Every call is 401 | `./demo.sh decode alice`: `iss` must be exactly `http://localhost:8180/realms/toolhive-demo` |
 | Every call is denied | `./demo.sh policies` (`last_error` shows a policy that failed to parse) and `curl localhost:9191/healthz` |
 | No traces in Jaeger | Try `OTEL_ENDPOINT=localhost:4317 ./demo.sh guardrails on` (gRPC instead of HTTP) |
 | `thv logs acme` | ToolHive's own proxy log for a workload |
+| `fetch` fails with "port is already allocated" | Something else uses host port 8080 (the fetch server's port). Keycloak is deliberately on 8180. |
+| Egress proxy image cannot be pulled (locked-down networks) | `THV_EXTRA_FLAGS=--isolate-network=false ./demo.sh up` runs without network isolation; Acts 2 and 7 then do not apply |

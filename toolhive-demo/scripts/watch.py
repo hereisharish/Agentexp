@@ -47,7 +47,7 @@ def fmt_pdp(e: dict) -> str:
 
 def fmt_audit(e: dict) -> str | None:
     etype = e.get("type", "")
-    if etype in ("mcp_ping", "mcp_notification", "sse_connection"):
+    if etype in ("mcp_ping", "mcp_notification", "mcp_request", "sse_connection"):
         return None
     outcome = e.get("outcome", "?")
     color = {"success": GREEN, "denied": RED, "failure": YELLOW, "error": YELLOW}.get(outcome, "")
