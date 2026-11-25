@@ -154,7 +154,7 @@ remove_workload() {
 
 run_acme() {
   remove_workload acme
-  local flags; mapfile -t flags < <(common_flags acme)
+  local flags=() f; while IFS= read -r f; do flags+=("$f"); done < <(common_flags acme)
   info "thv run acme (guardrails: $(mode_get guardrails on))"
   # shellcheck disable=SC2086 # THV_EXTRA_FLAGS is intentionally word-split
   thv run --name acme --transport stdio --proxy-port "$ACME_PORT" "${flags[@]}" ${THV_EXTRA_FLAGS:-} "$ACME_IMAGE"
@@ -162,7 +162,7 @@ run_acme() {
 
 run_fetch() {
   remove_workload fetch
-  local flags; mapfile -t flags < <(common_flags fetch)
+  local flags=() f; while IFS= read -r f; do flags+=("$f"); done < <(common_flags fetch)
   local net; net=$(mode_get network locked)
   if [[ $net == open ]]; then
     # Docker gateway (host.docker.internal) is blocked even with insecure_allow_all
@@ -202,7 +202,7 @@ cmd_up() {
   fi
   [[ ${REBUILD:-0} == 1 ]] && build=(--build)
   info "starting Keycloak, PDP, Jaeger, attacker"
-  compose up -d "${build[@]}"
+  compose up -d ${build[@]+"${build[@]}"}
   wait_for "$PDP_URL/healthz" "PDP"
   wait_for "$REALM_URL/.well-known/openid-configuration" "Keycloak realm" 180
   wait_for "http://localhost:16686/" "Jaeger UI"
